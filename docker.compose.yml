@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+
+    # ← HEALTHCHECK so Compose can wait until pg_isready returns “OK”
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    # image: minhaz71/fastapi-monitoring:latest
+    build:
+      context: ./nodejs-app
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+
+    environment:
+      DATABASE_URL: postgresql://appuser:apppass123@postgres:5432/appdb
+
+    # ← wait for the postgres healthcheck to pass before starting
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # ← in case of a transient failure, restart and let it try again
+    restart: on-failure
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:
