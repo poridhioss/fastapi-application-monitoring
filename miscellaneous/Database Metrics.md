@@ -15,32 +15,22 @@ rate(db_queries_total{operation="select"}[5m])
 
 Go to `Explain` tab to see details. 
 
-### Query Breakdown
-- **`db_queries_total`**: Counter metric tracking total database queries
-- **`{operation="select"}`**: Label selector filtering only SELECT operations
+### PromQL Explanation
+- **`db_queries_total`**: Counter metric tracking total database queries with operation labels
+- **`{operation="select"}`**: Label selector filtering only SELECT operations from UserData table
 - **`[5m]`**: Time range selector for the last 5 minutes
 - **`rate()`**: Function calculating the per-second average rate of increase
 
-### Mathematical Formula
+### How it's calculated
 ```
-Rate = (Current_Value - Previous_Value) / Time_Interval_Seconds
-```
-
-### Expected Output in Prometheus
-```
-db_queries_total{operation="select"} 1.4
+SELECT_Rate = (SELECT_Count_Now - SELECT_Count_5min_ago) / 300_seconds
 ```
 
-- **Value**: 1.4 queries per second
-- **Interpretation**: Database is processing 1.4 SELECT queries per second on average
+### Numerical Example
+If the SELECT query counter increased from 1,200 to 1,920 over 5 minutes (300 seconds), the rate would be: (1,920 - 1,200) ÷ 300 = 2.4 SELECT queries per second.
 
-### Monitoring Significance
-- **Performance Indicator**: High SELECT rates indicate heavy read workloads
-- **Capacity Planning**: Helps determine if read replicas are needed
-- **Baseline Establishment**: Normal rate varies by application (1-100+ QPS)
-
-
-
+### What it means
+This metric shows how frequently your FastAPI application is reading UserData from the database. High SELECT rates indicate active data retrieval, typically from the GET /data endpoint. This helps understand user engagement and whether read replicas might be needed for better performance.
 
 ## 2. INSERT Query Rate
 
@@ -51,35 +41,22 @@ rate(db_queries_total{operation="insert"}[5m])
 
 ![alt text](./images/image-1.png)
 
-### Query Breakdown
+### PromQL Explanation
 - **`db_queries_total`**: Same counter metric as SELECT queries
-- **`{operation="insert"}`**: Label selector for INSERT operations only
+- **`{operation="insert"}`**: Label selector for INSERT operations on UserData table
 - **`[5m]`**: 5-minute time window for rate calculation
 - **`rate()`**: Converts counter increases to per-second rates
 
-### Mathematical Formula
+### How it's calculated
 ```
 INSERT_Rate = (INSERT_Count_Now - INSERT_Count_5min_ago) / 300_seconds
 ```
 
-### Expected Output in Prometheus
-```
-db_queries_total{operation="insert"} 0.8
-```
-- **Value**: 0.8 inserts per second
-- **Interpretation**: Database is handling 0.8 new records per second
+### Numerical Example
+If the INSERT query counter increased from 450 to 690 over 5 minutes (300 seconds), the rate would be: (690 - 450) ÷ 300 = 0.8 INSERT queries per second.
 
-### Monitoring Significance
-- **Write Performance**: Critical for understanding database write load
-- **Transaction Volume**: Direct correlation with business activity
-- **Resource Planning**: High INSERT rates require more write-optimized storage
-
-### Performance Implications
-- **Normal Patterns**: Typically lower than SELECT rates (1:3 to 1:10 ratio)
-- **Batch Operations**: Sudden spikes may indicate bulk data imports
-- **Lock Contention**: Very high rates can cause table locking issues
-
-
+### What it means
+This metric tracks data creation activity in your FastAPI application. Each INSERT corresponds to a new UserData record being created through the POST /data endpoint. High INSERT rates indicate active user engagement and data growth, requiring attention to write performance and storage capacity.
 
 ## 3. SELECT 95th Percentile Latency
 
@@ -90,41 +67,23 @@ histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{operation="se
 
 ![alt text](./images/image-2.png)
 
-### Query Breakdown
-- **`db_query_duration_seconds_bucket`**: Histogram metric with latency buckets
-- **`{operation="select"}`**: Filter for SELECT operation latencies
+### PromQL Explanation
+- **`db_query_duration_seconds_bucket`**: Histogram metric with latency buckets for SELECT operations
+- **`{operation="select"}`**: Filter for SELECT operation latencies on UserData table
 - **`rate(...[5m])`**: Calculate rate of samples in each bucket over 5 minutes
 - **`sum(...) by (le)`**: Aggregate across all instances, grouped by bucket upper bounds
 - **`histogram_quantile(0.95, ...)`**: Calculate the 95th percentile from histogram
 
-### Mathematical Formula
+### How it's calculated
 ```
-P95 = Bucket_Lower_Bound + (Bucket_Width × (Target_Rank - Cumulative_Count_Below) / Bucket_Count)
-
-Where:
-- Target_Rank = 0.95 × Total_Sample_Count
-- Bucket_Width = Upper_Bound - Lower_Bound
+P95 = Bucket_Lower_Bound + ((0.95 × Total_Count - Count_Below) / Count_In_Bucket) × Bucket_Width
 ```
 
-### Expected Output in Prometheus
-```
-{} 0.045
-```
-- **Value**: 0.045 seconds (45 milliseconds)
-- **Interpretation**: 95% of SELECT queries complete within 45ms
+### Numerical Example
+If the SELECT query latency histogram shows 1,500 total queries distributed across buckets (800 in 0-10ms, 400 in 10-25ms, 200 in 25-50ms, 100 in 50-100ms), the 95th percentile would be: 0.025 + ((0.95 × 1500 - 1200) ÷ 200) × 0.025 = 0.053 seconds (53ms).
 
-### Performance Benchmarks
-- **Excellent**: < 50ms (0.05s)
-- **Good**: 50-200ms (0.05-0.2s)
-- **Acceptable**: 200ms-1s (0.2-1.0s)
-- **Concerning**: > 1s (1.0s+)
-
-### Optimization Indicators
-- **Values > 100ms**: Consider index optimization
-- **Values > 500ms**: Investigate query execution plans
-- **Values > 2s**: Critical performance issues requiring immediate attention
-
-
+### What it means
+This metric reveals the performance of data retrieval operations in your FastAPI application. The GET /data endpoint performance directly impacts user experience. Values under 50ms are excellent, while values over 200ms may indicate the need for query optimization or database indexing improvements.
 
 ## 4. INSERT 99th Percentile Latency
 
@@ -135,34 +94,21 @@ histogram_quantile(0.99, sum(rate(db_query_duration_seconds_bucket{operation="in
 
 ![alt text](./images/image-3.png)
 
-### Query Breakdown
-- **`histogram_quantile(0.99, ...)`**: Calculates 99th percentile instead of 95th
-- **Same base components**: Uses INSERT operation filter instead of SELECT
+### PromQL Explanation
+- **`histogram_quantile(0.99, ...)`**: Calculates 99th percentile instead of 95th for INSERT operations
+- **Same base components**: Uses INSERT operation filter for UserData table
 - **Higher Precision**: 99th percentile captures more extreme latency cases
 
-### Mathematical Formula
+### How it's calculated
 ```
-P99 = Interpolated_Value_Where_99%_Of_Samples_Fall_Below
+P99 = Bucket_Lower_Bound + ((0.99 × Total_Count - Count_Below) / Count_In_Bucket) × Bucket_Width
 ```
 
-### Expected Output in Prometheus
-```
-{} 0.125
-```
-- **Value**: 0.125 seconds (125 milliseconds)  
-- **Interpretation**: 99% of INSERT operations complete within 125ms
+### Numerical Example
+If the INSERT query latency histogram shows 400 total queries distributed across buckets (200 in 0-50ms, 150 in 50-100ms, 30 in 100-250ms, 15 in 250-500ms, 5 in 500-1000ms), the 99th percentile would be: 0.5 + ((0.99 × 400 - 395) ÷ 5) × 0.5 = 0.6 seconds (600ms).
 
-### Why 99th Percentile for INSERTs?
-- **Write Criticality**: INSERT failures have higher business impact
-- **Transaction Integrity**: Slow INSERTs can cause connection pool exhaustion
-- **User Experience**: Data creation delays are immediately visible to users
-
-### Performance Analysis
-- **Normal Range**: 2-5x higher than SELECT P95 latency
-- **Concerning Signs**: > 1 second indicates serious write performance issues
-- **Optimization Priority**: Focus on transaction log performance and index efficiency
-
-
+### What it means
+This metric is critical for understanding write performance in your FastAPI application. INSERT operations through the POST /data endpoint are typically slower than SELECTs due to transaction overhead. High P99 values (>1s) indicate serious write performance issues that could affect user experience and data consistency.
 
 ## 5. Checked-out Connections
 
@@ -173,31 +119,21 @@ db_pool_checked_out_connections
 
 ![alt text](./images/image-4.png)
 
-### Query Breakdown
-- **`db_pool_checked_out_connections`**: Gauge metric (instantaneous value)
-- **No time range**: Current snapshot of active connections
+### PromQL Explanation
+- **`db_pool_checked_out_connections`**: Gauge metric showing active database connections
+- **No time range**: Current snapshot of connections in use by FastAPI application
 - **Direct measurement**: No mathematical transformation needed
 
-### Expected Output in Prometheus
+### How it's calculated
 ```
-db_pool_checked_out_connections 8
-```
-- **Value**: 8 connections currently in use
-- **Interpretation**: 8 database connections are actively serving requests
-
-### Connection Pool Mathematics
-```
-Pool_Utilization = Checked_Out_Connections / Total_Pool_Size × 100%
-
-Example: 8 / 20 = 40% utilization
+Checked_Out_Connections = Active_Database_Connections_Currently_In_Use
 ```
 
-### Monitoring Significance
-- **Resource Utilization**: Shows how heavily the connection pool is used
-- **Performance Indicator**: High utilization may indicate connection leaks
-- **Capacity Planning**: Helps determine optimal pool size
+### Numerical Example
+If the database connection pool has 20 total connections and 8 are currently in use, the checked-out connections would be: 8 connections, representing 40% pool utilization (8 ÷ 20 × 100 = 40%).
 
-
+### What it means
+This metric shows how heavily your FastAPI application is using the database connection pool. Each active request to /data endpoints may hold a connection. High utilization suggests the application is under load, while very high values might indicate connection leaks or insufficient pool size.
 
 ## 6. Idle Connections
 
@@ -208,36 +144,21 @@ db_pool_idle_connections
 
 ![alt text](./images/image-5.png)
 
-### Query Breakdown
-- **`db_pool_idle_connections`**: Gauge showing available connections
-- **Instantaneous Value**: Current count of unused connections in pool
+### PromQL Explanation
+- **`db_pool_idle_connections`**: Gauge showing available connections in the pool
+- **Instantaneous Value**: Current count of unused connections ready for FastAPI requests
 - **Ready State**: These connections are established and ready for immediate use
 
-### Expected Output in Prometheus
+### How it's calculated
 ```
-db_pool_idle_connections 12
-```
-- **Value**: 12 connections available for use
-- **Interpretation**: 12 established database connections are idle and ready
-
-### Pool Health Mathematics
-```
-Total_Connections = Checked_Out + Idle + Creating + Invalid
-
-Pool_Health = (Idle + Checked_Out) / Total_Pool_Size × 100%
+Idle_Connections = Available_Database_Connections_In_Pool
 ```
 
-### Monitoring Applications
-- **Availability Assurance**: Ensures connections are available for new requests
-- **Pool Efficiency**: Balance between resource usage and response time
-- **Capacity Buffer**: Idle connections provide headroom for traffic spikes
+### Numerical Example
+If the database connection pool has 20 total connections, 8 are checked out, and 12 are idle, the idle connections would be: 12 connections, representing 60% available capacity (12 ÷ 20 × 100 = 60%).
 
-### Optimization Insights
-- **Too Many Idle**: Reduce `min_pool_size` to save database resources
-- **Too Few Idle**: Increase `max_pool_size` to improve response times
-- **Zero Idle**: Immediate capacity constraint - requests will queue
-
-
+### What it means
+This metric ensures your FastAPI application has sufficient database connections available for new requests. Adequate idle connections prevent request queuing and maintain good response times. Too few idle connections may cause performance bottlenecks during traffic spikes.
 
 ## 7. Connection Waiters
 
@@ -248,67 +169,112 @@ db_pool_waiters
 
 ![alt text](./images/image-6.png)
 
-### Query Breakdown
+### PromQL Explanation
 - **`db_pool_waiters`**: Gauge showing queued connection requests
-- **Queue Depth**: Number of application threads waiting for database connections
-- **Performance Bottleneck Indicator**: Non-zero values indicate resource constraint
+- **Queue Depth**: Number of FastAPI requests waiting for database connections
+- **Performance Bottleneck Indicator**: Non-zero values indicate connection pool saturation
 
-### Expected Output in Prometheus
+### How it's calculated
 ```
-db_pool_waiters 0
-```
-- **Value**: 0 requests waiting
-- **Interpretation**: No connection pool saturation - optimal state
-
-### Critical Performance Indicator
-```
-Wait_Time_Estimate = Average_Connection_Usage_Time × Queue_Position
-
-Example: 50ms × 3_waiters = 150ms additional latency
+Waiters = Requests_Waiting_For_Database_Connection
 ```
 
-### Alert Thresholds
-- **Warning**: > 0 waiters (pool under pressure)
-- **Critical**: > 5 waiters (significant user impact)
-- **Emergency**: > 20 waiters (potential service degradation)
+### Numerical Example
+If the database connection pool is at 100% utilization (20/20 connections in use) and 3 requests are waiting for connections, the waiters would be: 3 requests, with an estimated additional latency of 150ms per request (assuming 50ms average connection usage time × 3 waiters = 150ms).
 
-### Resolution Strategies
-1. **Immediate**: Scale up connection pool size
-2. **Short-term**: Optimize slow queries to release connections faster
-3. **Long-term**: Implement connection pooling at application layer
-4. **Architecture**: Consider read replicas to distribute connection load
+### What it means
+This metric is critical for identifying connection pool bottlenecks in your FastAPI application. Non-zero values indicate that requests to /data endpoints are queuing due to insufficient database connections. This directly impacts user experience and should trigger immediate scaling or optimization actions.
 
 
 
-## Database Monitoring Best Practices
+## 8. In-Progress Requests
 
-### Query Correlation Analysis
+### PromQL Query
 ```promql
-# Connection efficiency ratio
-db_pool_idle_connections / (db_pool_checked_out_connections + db_pool_idle_connections)
-
-# Query rate vs latency correlation
-rate(db_queries_total[5m]) vs histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m]))
+inprogress_requests
 ```
 
-### Performance Baseline Establishment
-- **Peak Hours**: Monitor query rates and latencies during high traffic
-- **Off-Peak Comparison**: Establish baseline performance expectations
-- **Growth Trends**: Track monthly increases in query volume and latency
+### PromQL Explanation
+- **`inprogress_requests`**: Gauge metric tracking currently active HTTP requests
+- **Real-time snapshot**: Shows instantaneous count of requests being processed
+- **No time range**: Direct measurement of current application load
 
-### Alerting Recommendations
-```yaml
-# Example alert conditions
-SELECT_Latency_High: P95 > 200ms for 5 minutes
-INSERT_Latency_Critical: P99 > 1s for 2 minutes
-Connection_Pool_Exhausted: db_pool_waiters > 0 for 1 minute
-Query_Rate_Anomaly: rate(db_queries_total[5m]) > 2x baseline
+### How it's calculated
+```
+In_Progress_Count = Active_HTTP_Requests_Currently_Processing
+```
+The metric is incremented when a request starts and decremented when it completes.
+
+### Numerical Example
+```
+inprogress_requests 5
+```
+- **Value**: 5 requests currently being processed
+- **Scenario**: During a traffic spike, 5 users are simultaneously accessing the application
+
+### What it means
+This metric indicates the current concurrency level of your FastAPI application. A high number suggests the application is under load, while zero indicates no active requests. This is particularly useful for understanding database connection pool utilization patterns, as each in-progress request may hold a database connection.
+
+## 9. Database Query Rate by Operation Type
+
+### PromQL Query
+```promql
+rate(db_queries_total[5m])
 ```
 
-### Capacity Planning Metrics
-- **Peak Query Rate**: Maximum sustainable QPS before latency degradation
-- **Connection Pool Optimization**: Right-sizing based on actual usage patterns
-- **Storage Performance**: Correlation between query patterns and disk I/O
-- **Memory Usage**: Database cache hit ratios vs query performance
+### PromQL Explanation
+- **`db_queries_total`**: Counter metric with operation labels (select, insert, update, delete)
+- **`[5m]`**: 5-minute time window for rate calculation
+- **`rate()`**: Converts counter increases to per-second rates
+- **Label-based**: Can filter by specific operations
+
+### How it's calculated
+```
+Query_Rate = (Query_Count_Now - Query_Count_5min_ago) / 300_seconds
+```
+
+### Numerical Example
+```
+db_queries_total{operation="select"} 2.4
+db_queries_total{operation="insert"} 0.8
+db_queries_total{operation="update"} 0.3
+db_queries_total{operation="delete"} 0.1
+```
+- **Total**: 3.6 queries per second across all operations
+- **Scenario**: Application handling user data CRUD operations with typical read-heavy workload
+
+### What it means
+This metric shows the database query patterns specific to your FastAPI application. The UserData model operations (create, read, update, delete) are tracked separately, allowing you to understand which operations are most frequent and potentially optimize accordingly. High SELECT rates indicate read-heavy workloads, while high INSERT/UPDATE rates suggest active data modification.
+
+## 10. Database Query Duration by Operation
+
+### PromQL Query
+```promql
+histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m]))
+```
+
+### PromQL Explanation
+- **`db_query_duration_seconds_bucket`**: Histogram with operation labels
+- **`rate(...[5m])`**: Rate of samples in each bucket over 5 minutes
+- **`histogram_quantile(0.95, ...)`**: 95th percentile calculation
+- **Operation-specific**: Can filter by select, insert, update, delete
+
+### How it's calculated
+```
+P95_Duration = Interpolated_Value_Where_95%_Of_Queries_Complete_Faster
+```
+
+### Numerical Example
+```
+{operation="select"} 0.045
+{operation="insert"} 0.125
+{operation="update"} 0.098
+{operation="delete"} 0.067
+```
+- **Values**: 45ms for SELECT, 125ms for INSERT, 98ms for UPDATE, 67ms for DELETE
+- **Scenario**: UserData table operations with typical performance characteristics
+
+### What it means
+This metric reveals the performance characteristics of different database operations in your FastAPI application. INSERT operations typically take longer due to transaction overhead, while SELECT operations are usually fastest. High latency in any operation type indicates potential database performance issues that could affect user experience.
 
 This comprehensive analysis of database monitoring queries provides the foundation for maintaining high-performance database operations in production FastAPI applications.
